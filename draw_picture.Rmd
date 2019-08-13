@@ -1,0 +1,657 @@
+---
+title: "Draw_picture"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+## wilcox_test_boxplot_GDSC_cycle
+```{r}
+sorted_mut_index <- read.csv("/home/byzhang/data/cell_line/gdsc/split_every_drug/sorted_mut_index.txt",sep = '\t',header = F)
+#Ranked mut filename through index
+path_mut <-"/home/byzhang/data/cell_line/gdsc/split_every_drug/split_every_drug_mut_withHeader/"
+#Mut file path
+sorted_wt_index <- read.csv("/home/byzhang/data/cell_line/gdsc/split_every_drug/sorted_wt_index.txt",sep = '\t',header = F)
+path_wt <-"/home/byzhang/data/cell_line/gdsc/split_every_drug/split_every_drug_wt_withHeader/"
+
+# Only remove the NA value, not including NAN value
+filter <- function(data){
+  indexes <- c()
+  for (j in 1:nrow(data)){
+    flag = FALSE
+    for (i in data[j,]){
+      if (is.na(i) & ! is.nan(i)){
+        flag = TRUE
+        indexes <- c(indexes, -j)
+        break}
+    }
+  }
+  data <- data[indexes, ]
+  return(data)
+}
+
+for(i in 1:nrow(sorted_mut_index)){
+Cancer_specific_mut <- read.csv(paste0(path_mut, sorted_mut_index[i,1], ''),sep = '\t',header = T)
+# Delete NA value include NAN
+Cancer_specific_mut <- filter(Cancer_specific_mut)
+# Only remove the NA value, not including NAN value
+Cancer_specific_wt <- read.csv(paste0(path_wt,sorted_wt_index[i,1],''),sep = '\t',header = T)
+Cancer_specific_wt <- filter(Cancer_specific_wt)
+
+mut_IC50 <- Cancer_specific_mut$IC50
+wt_IC50 <- Cancer_specific_wt$IC50
+mut_AUC <- Cancer_specific_mut$AUC
+wt_AUC <- Cancer_specific_wt$AUC
+
+merge_IC50<-c(mut_IC50,wt_IC50)
+merge_AUC<-c(mut_AUC,wt_AUC)
+
+type<-c(rep(1,length(mut_AUC)),rep(2,length(wt_AUC)))
+
+wd<-as.data.frame(cbind(merge_IC50,as.factor(type)))
+IC50_p <- wilcox.test(merge_IC50~type,data=wd,correct=T, conf.int=TRUE,exact=F,alternative = "less")
+wd_2<-as.data.frame(cbind(merge_AUC,as.factor(type)))
+AUC_p <- wilcox.test(merge_AUC~type,data=wd_2, correct=T, conf.int=TRUE,exact=F,alternative = "less")
+# t.test(merge_AUC~type,data=wd_2)
+
+# merged AUC and IC50 value
+mutation_gene <- Cancer_specific_mut$MutationGene
+drug <- Cancer_specific_wt$DrugName_standard
+SL <- Cancer_specific_wt$GeneA.GeneB
+wt_gene <- paste(mutation_gene,"wt",sep = '_')
+mut_gene <- paste(mutation_gene,'mut',sep = '_')
+merge_mut_wt <- as.data.frame(rbind(cbind(mut_IC50,mut_AUC, as.character(Cancer_specific_mut$Cell.line.name), rep(mut_gene, nrow(Cancer_specific_mut))),cbind(wt_IC50,wt_AUC, as.character(Cancer_specific_wt$Cell.line.name), rep(wt_gene, nrow(Cancer_specific_wt)))))
+colnames(merge_mut_wt) <- c("IC50","AUC", "CellLine", "Type")
+# delete duplicate value
+merge_mut_wt=unique(merge_mut_wt)
+# View(merge_mut_wt)
+
+
+# AUC
+if (AUC_p$p.value < 0.05) {
+  cat(as.character(sorted_wt_index[i,1]),sep = "\n",file = '/home/byzhang/data/cell_line/gdsc/wilcox_boxplot/Significant/Significant_AUC.txt',append = T)
+  # split the index
+  # strsplit(as.character(sorted_mut_index[i,1]),split = '_',fixed = T)[[1]][7]
+  setwd("/home/byzhang/data/cell_line/gdsc/wilcox_boxplot/Picture/AUC/less")
+  # boxplot of AUC
+  library(ggplot2)
+  type <- merge_mut_wt$Type
+  AUC <- merge_mut_wt$AUC
+  merge_mut_wt$AUC <- as.numeric(merge_mut_wt$AUC)
+  cell_line <- merge_mut_wt$CellLine
+  AUC_of_drug <- paste("AUC of",drug,sep = " ")
+  
+  jpeg(file = paste(SL,drug,"AUC_Cancer_specific.jpeg",sep = "_")[1])
+  print(ggplot(merge_mut_wt, aes(x = type, y = AUC, fill = type)) +scale_fill_manual(values=c("tomato4", "OliveDrab"))+
+    stat_boxplot(geom = "errorbar",width=0.2) +
+    geom_boxplot(position = position_dodge(0.4),width = 0.25,outlier.colour = "DimGrey",outlier.alpha=0.3,outlier.size=1.5) +geom_point(alpha=0.65,size= 1.3,colour='DimGrey',shape=16, position=position_jitter(0.09))+
+    labs(x = "", y = AUC_of_drug) + theme(panel.background = element_rect(fill="white",colour="black"),axis.line = element_line(colour = "black"),aspect.ratio = 1,legend.position="none") + annotate("text",x = -Inf,y = Inf,hjust = -1.7,vjust = 2,label =paste("p = ", AUC_p$p.value), size = 3))
+dev.off()
+} else {
+  setwd("/home/byzhang/data/cell_line/gdsc/wilcox_boxplot/Picture/AUC/more")
+  cat(as.character(sorted_wt_index[i,1]),sep = "\n",file = '/home/byzhang/data/cell_line/gdsc/wilcox_boxplot/Significant/no_Significant_AUC.txt',append = T)
+  # strsplit(as.character(sorted_mut_index[i,1]),split = '_',fixed = T)[[1]][7]
+  # boxplot of AUC
+  library(ggplot2)
+  type <- merge_mut_wt$Type
+  AUC <- merge_mut_wt$AUC
+  merge_mut_wt$AUC <- as.numeric(merge_mut_wt$AUC)
+  cell_line <- merge_mut_wt$CellLine
+  AUC_of_drug <- paste("AUC of",drug,sep = " ")
+  jpeg(file = paste(SL,drug,"AUC_Cancer_specific.jpeg",sep = "_")[1])
+  # View(merge_mut_wt)
+  print(ggplot(merge_mut_wt, aes(x = type, y = AUC, fill = type)) +scale_fill_manual(values=c("tomato4", "OliveDrab"))+
+    stat_boxplot(geom = "errorbar",width=0.2) +
+    geom_boxplot(position = position_dodge(0.4),width = 0.25,outlier.colour = "DimGrey",outlier.alpha=0.3,outlier.size=1.5) +geom_point(alpha=0.65,size= 1.3,colour='DimGrey',shape=16, position=position_jitter(0.09))+
+    labs(x = "", y = AUC_of_drug) + theme(panel.background = element_rect(fill="white",colour="black"),axis.line = element_line(colour = "black"),aspect.ratio = 1,legend.position="none") + annotate("text",x = -Inf,y = Inf,hjust = -1.7,vjust = 2,label =paste("p = ", AUC_p$p.value), size = 3))
+  dev.off()
+}
+
+#IC50
+if (IC50_p$p.value < 0.05){
+    cat(as.character(sorted_wt_index[i,1]),sep = "\n",file = '/home/byzhang/data/cell_line/gdsc/wilcox_boxplot/Significant/Significant_IC50.txt',append = T)
+  strsplit(as.character(sorted_mut_index[i,1]),split = '_',fixed = T)[[1]][7]
+  # p value is less than 0.0025
+  setwd("/home/byzhang/data/cell_line/gdsc/wilcox_boxplot/Picture/IC50/less")
+  library(ggplot2)
+  IC50 <- merge_mut_wt$IC50
+  merge_mut_wt$IC50 <- as.numeric(merge_mut_wt$IC50)
+  cell_line <- merge_mut_wt$CellLine
+  IC50_of_drug <- paste("IC50 of",drug,sep = " ")
+  # boxplot of IC50
+  jpeg(file = paste(SL,drug,"IC50_Cancer_specific.jpeg",sep = "_")[1])
+  print(ggplot(merge_mut_wt, aes(x = type, y = IC50, fill = type)) +scale_fill_manual(values=c("tomato4", "OliveDrab"))+
+    stat_boxplot(geom = "errorbar",width=0.2) +
+    geom_boxplot(position = position_dodge(0.4),width = 0.25,outlier.colour = "DimGrey",outlier.alpha=0.3,outlier.size=1.5) +geom_point(alpha=0.65,size= 1.3,colour='DimGrey',shape=16, position=position_jitter(0.09))+
+    labs(x = "", y = IC50_of_drug) + theme(panel.background = element_rect(fill="white",colour="black"),axis.line = element_line(colour = "black"),aspect.ratio = 1,legend.position="none") + annotate("text",x = -Inf,y = Inf,hjust = -1.7,vjust = 2,label =paste("p = ", IC50_p$p.value), size = 3))
+  dev.off()
+} else{
+  setwd("/home/byzhang/data/cell_line/gdsc/wilcox_boxplot/Picture/IC50/more")
+  cat(as.character(sorted_wt_index[i,1]),sep = "\n",file = '/home/byzhang/data/cell_line/gdsc/wilcox_boxplot/Significant/no_Significant_IC50.txt',append = T)
+  # boxplot of IC50
+  library(ggplot2)
+  IC50 <- merge_mut_wt$IC50
+  merge_mut_wt$IC50 <- as.numeric(merge_mut_wt$IC50)
+  cell_line <- merge_mut_wt$CellLine
+  IC50_of_drug <- paste("IC50 of",drug,sep = " ")
+  jpeg(file = paste(SL,drug,"IC50_Cancer_specific.jpeg",sep = "_")[1])
+  # View(merge_mut_wt)
+  print(ggplot(merge_mut_wt, aes(x = type, y = IC50, fill = type)) +scale_fill_manual(values=c("tomato4", "OliveDrab"))+
+    stat_boxplot(geom = "errorbar",width=0.2) +
+    geom_boxplot(position = position_dodge(0.4),width = 0.25,outlier.colour = "DimGrey",outlier.alpha=0.3,outlier.size=1.5) +geom_point(alpha=0.65,size= 1.3,colour='DimGrey',shape=16, position=position_jitter(0.09))+
+    labs(x = "", y = IC50_of_drug) + theme(panel.background = element_rect(fill="white",colour="black"),axis.line = element_line(colour = "black"),aspect.ratio = 1,legend.position="none") + annotate("text",x = -Inf,y = Inf,hjust = -1.7,vjust = 2,label =paste("p = ", IC50_p$p.value), size = 3))
+  dev.off()
+}
+}
+
+```
+
+
+## boxplot_single
+```{r}
+setwd("/home/byzhang/data/cell_line/wilcox_boxplot/picture")
+library(ggplot2)
+merge_mut_wt <- as.data.frame(rbind(cbind(Cancer_specific_wt$IC50, Cancer_specific_wt$AUC, as.character(Cancer_specific_wt$Cell.line.name), rep('TP53_wt', nrow(Cancer_specific_wt))), cbind(Cancer_specific_mut$IC50, Cancer_specific_mut$AUC, as.character(Cancer_specific_mut$Cell.line.name), rep('TP53_mut', nrow(Cancer_specific_mut)))))
+colnames(merge_mut_wt) <- c("IC50", "AUC", "CellLine", "Type")
+type <- merge_mut_wt$Type
+IC50 <- merge_mut_wt$IC50
+AUC <- merge_mut_wt$AUC
+merge_mut_wt$AUC <- as.numeric(merge_mut_wt$AUC)
+merge_mut_wt$IC50 <- as.numeric(merge_mut_wt$IC50) 
+cell_line <- merge_mut_wt$CellLine
+
+#AUC
+# jpeg("Lestaurtinib_AUC_Cancer_specific.jpeg")
+ggplot(merge_mut_wt, aes(x = type, y = AUC, fill = type)) +scale_fill_manual(values=c("tomato4", "OliveDrab"))+
+  stat_boxplot(geom = "errorbar",width=0.2) +
+  geom_boxplot(position = position_dodge(0.4),width = 0.25,outlier.colour = "DimGrey",outlier.alpha=0.3,outlier.size=1.5) +geom_point(alpha=0.65,size= 1.3,colour='DimGrey',shape=16, position=position_jitter(0.09))+
+  labs(x = "", y = "AUC of Cetuximab") +theme(panel.background = element_rect(fill="white",colour="black"),axis.line = element_line(colour = "black"),aspect.ratio = 1,legend.position="none")+ annotate("text",x=0.95,y=995,label =paste("p = ", AUC_p$p.value), size = 3)
+
+#IC50
+# jpeg("Lestaurtinib_IC50_Cancer_specific.jpeg")
+ggplot(merge_mut_wt, aes(x = type, y = IC50, fill = type)) +scale_fill_manual(values=c("tomato4", "OliveDrab"))+
+  stat_boxplot(geom = "errorbar",width=0.2) +
+  geom_boxplot(position = position_dodge(0.4),width = 0.25,outlier.colour = "red",outlier.alpha=1,outlier.size=1.5) +geom_point(alpha=0.65,size= 1.3,colour='DimGrey',shape=16, position=position_jitter(0.09))+
+  labs(x = "", y = "IC50 of Cetuximab") +theme(panel.background = element_rect(fill="white",colour="black"),axis.line = element_line(colour = "black"),aspect.ratio = 1,legend.position="none")+ annotate("text",x=0.95,y=995,label = paste("p = ", IC50_p$p.value),size = 3)
+# dev.off()
+```
+
+
+## pie
+```{r}
+#IC50
+# setwd("/home/byzhang/data/Picture/Pie")
+# jpeg("static_IC50.jpeg")
+number <- c(33,4,134)
+lbs <- c('Validated','Others','No_Validated')
+pct <- round(number/sum(number)*100)
+pct <- paste(pct,"%",sep = "")
+pie(number,labels =pct ,col = c("#3a9679","#fabc60","#e16262"),clockwise = T)
+legend(.9,1,lbs,cex = 0.8,fill = c("#3a9679","#fabc60","#e16262"))
+# par(mai=c(0.1,0.1,0.1,7))
+# dev.off()
+
+# AUC
+number <- c(53,4,246)
+lbs <- c('Validated','Others','No_Validated')
+pct <- round(number/sum(number)*100)
+pct <- paste(pct,"%",sep = "")
+pie(number,labels =pct ,col = c("#3a9679","#fabc60","#e16262"),clockwise = T)
+legend(.9,1,lbs,cex = 0.8,fill = c("#3a9679","#fabc60","#e16262"))
+```
+
+
+## Three-dimensional map
+```{r}
+library(scatterplot3d)
+source('http://www.sthda.com/sthda/RDoc/functions/addgrids3d.r')
+Three_score_plot3 <- read.table("/home/byzhang/data/Picture/Three-dimensional map/Three_score_no_Best_uniq_merge.txt",header = TRUE,sep = '\t')
+Three_score_noBest <- read.table("/home/byzhang/data/Picture/Three-dimensional map/Three_score_noBest_uniq.txt",header = TRUE,sep = '\t')
+Three_score_Best <- read.table("/home/byzhang/data/Picture/Three-dimensional map/Three_score_Best_uniq.txt",header = TRUE,sep = '\t')
+Drug_score <- Three_score_plot3$Drug_Score_third_nor
+SL_score <- Three_score_plot3$SL_Score_second
+ReDiseas_score <- Three_score_plot3$ReDiseaseScore_nor
+Class <- Three_score_plot3$Class
+Class.f <- factor(Class,levels=c(1,2))
+Drug_score_no <- Three_score_noBest$Drug_Score_third_nor
+SL_score_no <- Three_score_noBest$SL_Score_second
+ReDiseas_score_no <- Three_score_noBest$ReDiseaseScore_nor
+Drug_score_best <- Three_score_Best$Drug_Score_third_nor
+SL_score_best <- Three_score_Best$SL_Score_second
+ReDiseas_score_best <- Three_score_Best$ReDiseaseScore_nor
+# par(mar=c(5,5,5,5),pin=c(4,4))
+setwd("/home/byzhang/data/Picture/Three-dimensional map")
+pdf("Three_dimensional_score.pdf",width=6.75,height=5.75)
+#gird of bottom
+s3d <- scatterplot3d(Drug_score,SL_score,ReDiseas_score,color=Class.f,pch = "",xlab = "Drug_score",ylab = "",zlab = "ReDisease_score",cex.axis = 0.55,cex.lab = 0.65,angle = 45,y.margin.add = 0.1,font.axis = 2,font.lab = 2,box = FALSE,lty.grid = 6,scale.y=1.2,lab.z = 7)
+# par("usr")
+#add the gird of left and back
+addgrids3d(Drug_score,SL_score,ReDiseas_score,grid =c("xz","yz"),angle = 45,lty.grid = 6,scale.y=1.2,lab.z = 7)
+#add no best condidation point,avoid points below the line
+s3d$points3d(Drug_score_no,SL_score_no,ReDiseas_score_no,pch = 2,cex = 0.4,col = adjustcolor("#10ac84", alpha.f = 0.6))
+#add best condidation point,avoid points below the line
+s3d$points3d(Drug_score_best,SL_score_best,ReDiseas_score_best,pch = 17,cex = 0.6,col = adjustcolor("#FF6A6A", alpha.f = 0.9))
+#add legend
+legend(s3d$xyz.convert(0.13,0.8,0.9),yjust = 0,legend = c("Best Candidation","NoBest Candidation"),cex = 0.6,col = c("#FF6A6A","#10ac84"),pch = c(17,2))
+#rotated  and bold z axis text
+text(x = 6.8, y = 0.5, "SL_score", srt = 41,cex = 0.65,font = 2)
+dev.off()
+```
+
+
+## Three-dimensional map
+### BestCondidation_348 and duplicated by program
+```{r}
+library(scatterplot3d)
+source('http://www.sthda.com/sthda/RDoc/functions/addgrids3d.r')
+# BestCondidation and  noBest duplicated
+Three_score_Best <- read.table("/home/byzhang/data/Picture/Three-dimensional map/BestCondidation_348.txt",header = TRUE,sep = '\t',quote = "" )
+Three_score_Best_uniq <- Three_score_Best[!duplicated(Three_score_Best[,c(17,18,19)]),c(17,18,19)]
+Three_score_noBest <- read.table("/home/byzhang/data/Picture/Three-dimensional map/No_BestCondidation_232661.txt",header = TRUE,sep = '\t',quote = "" )
+Three_score_noBest_uniq <- Three_score_noBest[!duplicated(Three_score_noBest[,c(17,18,19)]),c(17,18,19)]
+# merge Best and noBest
+merge_Best_noBest <- as.data.frame(rbind(cbind(Three_score_Best_uniq$SL_Score_second, Three_score_Best_uniq$ReDiseaseScore_nor, Three_score_Best_uniq$Drug_Score_third_nor, rep(
+  1, nrow(Three_score_Best_uniq))), cbind(Three_score_noBest_uniq$SL_Score_second, Three_score_noBest_uniq$ReDiseaseScore_nor, Three_score_noBest_uniq$Drug_Score_third_nor, rep(2, nrow(Three_score_noBest_uniq)))))
+colnames(merge_Best_noBest) <- c("Sl_score", "ReDiseaseScore", "Drug_Score", "Type")
+
+Drug_score <- merge_Best_noBest$Drug_Score
+SL_score <- merge_Best_noBest$Sl_score
+ReDiseas_score <- merge_Best_noBest$ReDiseaseScore
+Class <- merge_Best_noBest$Type
+Class.f <- factor(Class,levels=c(1,2))
+
+Drug_score_no <- Three_score_noBest_uniq$Drug_Score_third_nor
+SL_score_no <- Three_score_noBest_uniq$SL_Score_second
+ReDiseas_score_no <- Three_score_noBest_uniq$ReDiseaseScore_nor
+
+Drug_score_best <- Three_score_Best_uniq$Drug_Score_third_nor
+SL_score_best <- Three_score_Best_uniq$SL_Score_second
+ReDiseas_score_best <- Three_score_Best_uniq$ReDiseaseScore_nor
+# par(mar=c(5,5,5,5),pin=c(4,4))
+setwd("/home/byzhang/data/Picture/Three-dimensional map")
+pdf("Three_dimensional_score.pdf",width=6.75,height=5.75)
+#gird of bottom
+s3d <- scatterplot3d(Drug_score,SL_score,ReDiseas_score,color=Class.f,pch = "",xlab = "Drug_score",ylab = "",zlab = "ReDisease_score",cex.axis = 0.55,cex.lab = 0.65,angle = 45,y.margin.add = 0.1,font.axis = 2,font.lab = 2,box = FALSE,lty.grid = 6,scale.y=1.2,lab.z = 7)
+# par("usr")
+#add the gird of left and back
+addgrids3d(Drug_score,SL_score,ReDiseas_score,grid =c("xz","yz"),angle = 45,lty.grid = 6,scale.y=1.2,lab.z = 7)
+#add no best condidation point,avoid points below the line
+s3d$points3d(Drug_score_no,SL_score_no,ReDiseas_score_no,pch = 2,cex = 0.4,col = adjustcolor("#10ac84", alpha.f = 0.6))
+#add best condidation point,avoid points below the line
+s3d$points3d(Drug_score_best,SL_score_best,ReDiseas_score_best,pch = 17,cex = 0.6,col = adjustcolor("#FF6A6A", alpha.f = 0.9))
+#add legend
+legend(s3d$xyz.convert(0.13,0.8,0.98),yjust = 0,legend = c("Best Candidation","NoBest Candidation"),cex = 0.6,col = c("#FF6A6A","#10ac84"),pch = c(17,2))
+#rotated  and bold z axis text
+text(x = 6.8, y = 0.5, "SL_score", srt = 41,cex = 0.65,font = 2)
+dev.off()
+
+```
+
+
+## SL network
+```{r}
+setwd("/home/byzhang/data/Picture/network")
+# pdf("SL_network.pdf",width=8.5,height=11)
+library(igraph,lib='/usr/lib/R/site-library',warn.conflicts = FALSE)
+# reading data file
+edges <- read.table('/home/byzhang/data/sl_network/SL_edges.txt',header = T,sep = '\t')
+points <- read.table('/home/byzhang/data/sl_network/SL_points.txt',header = T,sep = '\t')
+sl_graph <- graph.data.frame(edges,directed = F, vertices = points)
+# Control exception
+slComp = components(sl_graph)
+sl_graph_sub = induced_subgraph(sl_graph,which(slComp$membership ==1))
+# Reproduce the result
+set.seed(6521) 
+# l<-layout.reingold.tilford(sl_graph_sub,circular=T)
+l<-layout.sphere(sl_graph_sub)
+
+# V(sl_graph)[bte<=100]$size =2
+# plot(V(sl_graph)$bte)
+
+# Curved connection
+E(sl_graph_sub)$curved <- 0.2
+# Node without border
+V(sl_graph_sub)$frame.color <- NA 
+# Edge width
+# E(sl_graph_sub)$width <- E(sl_graph_sub)$Merge_score_third 
+E(sl_graph_sub)$width <- 0.1
+# Do not show edges
+E(sl_graph_sub)$color <- 'white'
+# Node label and color
+V(sl_graph_sub)$label <- V(sl_graph_sub)$name
+V(sl_graph_sub)$label.color <- adjustcolor("black", .8)
+# V(sl_graph_sub)$label <- V(sl_graph_sub)$name
+source("http://michael.hahsler.net/SMU/ScientificCompR/code/map.R")
+
+plot(sl_graph_sub,layout=l,vertex.color = adjustcolor("#bdf2d5", alpha.f = .5),vertex.label = ifelse(degree(sl_graph_sub) > 100, V(sl_graph_sub)$label, NA),vertex.size = map(degree(sl_graph_sub),c(1,20)), vertex.label.cex= 0.15)
+# summary(sl_graph)
+# dev.off()
+
+# cfg <- edge.betweenness.community(sl_graph_sub,weight=E(sl_graph_sub)$weight,directed=F)
+# plot(cfg,sl_graph_sub,vertex.label = ifelse(degree(sl_graph_sub) > 100, V(sl_graph_sub)$label, NA),vertex.size = map(degree(sl_graph_sub),c(1,20)), vertex.label.cex= 0.15)
+```
+
+
+
+## Bipartite and heatmap
+```{r}
+library(igraph,lib='/usr/lib/R/site-library',warn.conflicts = FALSE)
+# read file
+SL_drug <- read.table('/home/byzhang/data/bipartite/drug_SL_type_withHeader.txt',header = T,sep = '\t')
+SL<- read.table('/home/byzhang/data/bipartite/SL_563.txt',header = T,sep = '\t')
+drug <- read.table('/home/byzhang/data/bipartite/drug_939.txt',header = T,sep = '\t')
+# rbind vertex into one colclumn
+nodes_SL_drug <- as.data.frame(c(as.character(SL$GeneA.GeneB),as.character(drug$DrugName_standard)))
+names(nodes_SL_drug)[1] <- "SL_drug"
+
+SL_drug_g <- graph.data.frame(SL_drug,directed = F,vertices  = nodes_SL_drug)
+
+# selecte data that degree more than 15
+SL_drug_sub = induced_subgraph(SL_drug_g,which(degree(SL_drug_g) > 15))
+set.seed(155)
+
+# vertex attribute
+V(SL_drug_sub)$type <- bipartite_mapping(SL_drug_sub)$type
+V(SL_drug_sub)$color1 <- ifelse(V(SL_drug_sub)$type, adjustcolor("#f79c1d", alpha.f = .5), adjustcolor("#9c2c2c", alpha.f = .5))
+V(SL_drug_sub)$color <- ifelse(degree(SL_drug_sub) > 0,V(SL_drug_sub)$color1 , "white")
+V(SL_drug_sub)$shape <- ifelse(V(SL_drug_sub)$type, "circle", "square")
+V(SL_drug_sub)$label.color <- "black"
+V(SL_drug_sub)$label <- ifelse(degree(SL_drug_sub) > 0, V(SL_drug_sub)$name, NA)
+V(SL_drug_sub)$label.cex <-  ifelse(degree(SL_drug_sub) > 1, degree(SL_drug_sub) * 0.002,degree(SL_drug_sub) * 0.006)
+V(SL_drug_sub)$frame.color <-  "NA"
+# label position
+V(SL_drug_sub)$label.dist <- 2
+V(SL_drug_sub)$label.degree <- c(-pi/2,pi/2)[1+V(SL_drug_sub)$type]
+V(SL_drug_sub)$size1 <-c(degree(SL_drug_sub) * 0.02,degree(SL_drug_sub) * 0.03)[1+V(SL_drug_sub)$type]
+V(SL_drug_sub)$size2 <-c(degree(SL_drug_sub) * 0.03,degree(SL_drug_sub) * 0.04)[1+V(SL_drug_sub)$type]
+V(SL_drug_sub)$size <- ifelse(degree(SL_drug_sub) > 1,V(SL_drug_sub)$size1, V(SL_drug_sub)$size2)
+# edge attribute
+E(SL_drug_sub)$color <- c(adjustcolor("#7fa99b", alpha.f = .7), adjustcolor("#f6e79c", alpha.f = .7))[1 + (E(SL_drug_sub)$Class=="A")]
+E(SL_drug_sub)$width <- 0.07
+par(pin=c(12,15),mai=c(1,.2,1,.2))
+plot(SL_drug_sub,layout=layout_as_bipartite,asp = 0.1)
+
+# degree and betweenness
+# ecount(SL_drug_sub)
+# deg <- degree(SL_drug_g)
+# bet <- betweenness(SL_drug_sub)
+# clos <- closeness(SL_drug_sub)
+# eig <- eigen_centrality(SL_drug_sub)$vector
+# cent_df <- data.frame(types, deg, bet, clos, eig)
+# cent_df[order(cent_df$type, decreasing = TRUE),]
+# plot(deg)
+# plot(bet)
+
+# heatmap
+SL_drug_sub_matrix <- get.adjacency(SL_drug_sub, sparse=F,type = "upper",names = T)
+# split SL and drug
+# V(SL_drug_sub)$name_SL <- V(SL_drug_sub)$name[grep("\\+",V(SL_drug_sub)$name)]
+# V(SL_drug_sub)$name_drug <- V(SL_drug_sub)$name[89:155]
+colnames(SL_drug_sub_matrix) <- V(SL_drug_sub)$name
+rownames(SL_drug_sub_matrix) <- V(SL_drug_sub)$name
+palf <- colorRampPalette(c("gold", "dark orange"))
+heatmap(SL_drug_sub_matrix[1:88,89:155], Rowv = NA, Colv = NA,  cexRow=0.08,  cexCol=0.08, col = palf(100), scale="none", margins = c(4,5))
+```
+
+
+```{r}
+library(igraph)
+
+#### create example input data
+nodesSet1 <- 1:3
+nodesSet2 <- 1:5
+edgeList <- data.frame(S1=c(1,1,2,3,3,3),
+                       S2=c(1,3,5,3,4,2))
+edgeListVec <- as.vector(t(as.matrix(data.frame(S1=paste0('A',edgeList$S1),
+                             S2=paste0('B',edgeList$S2)))))
+g <- add.edges(g,edgeListVec)
+```
+
+```{r}
+### Here's one way to do it.
+
+library(igraph)
+library(ggplot2)
+
+## The igraph docs say that vertex.label.degree controls the position
+## of the labels with respect to the vertices. It's interpreted as a
+## radian, like this:
+##
+## Value is : Label appears ... the node
+## -pi/2: above
+## 0: to the right of
+## pi/2: below
+## pi: to the left of
+##
+## We can generalize this. vertex.label.degree can take a vector as
+## well as a scalar for its argument. So we write a function to 
+## calculate the right position for a label based on its vertex's location
+## on the circle.
+
+## Get the labels aligned consistently around the edge of the circle
+## for any n of nodes.
+## This code borrows bits of ggplot2's polar_coord function
+## start = offset from 12 o'clock in radians
+## direction = 1 for clockwise; -1 for anti-clockwise.
+
+radian.rescale <- function(x, start=0, direction=1) {
+  c.rotate <- function(x) (x + start) %% (2 * pi) * direction
+  c.rotate(scales::rescale(x, c(0, 2 * pi), range(x)))
+}
+
+### Example
+## Generate some fake data
+n <- 15
+g <- erdos.renyi.game(n, 0.5)
+## Obviously labeling in this way this only makes sense for graphs
+## laid out as a circle to begin with
+la <- layout.circle(g)
+
+lab.locs <- radian.rescale(x=1:n, direction=-1, start=0)
+plot(g, layout=la, vertex.size=2, vertex.label.dist=1,
+     vertex.label.degree=lab.locs)
+```
+
+```{r}
+## A simple example with a couple of actors
+## The typical case is that these tables are read in from files....
+actors <- data.frame(name=c("Alice", "Bob", "Cecil", "David",
+                            "Esmeralda"),
+                     age=c(48,33,45,34,21),
+                     gender=c("F","M","F","M","F"))
+relations <- data.frame(from=c("Bob", "Cecil", "Cecil", "David",
+                               "David", "Esmeralda"),
+                        to=c("Alice", "Bob", "Alice", "Alice", "Bob", "Alice"),
+                        same.dept=c(FALSE,FALSE,TRUE,FALSE,FALSE,TRUE),
+                        friendship=c(4,5,5,2,1,1), advice=c(4,5,5,4,2,3))
+g <- graph.data.frame(relations, directed=TRUE, vertices=actors)
+print(g, e=TRUE, v=TRUE)
+g_matrix <- get.adjacency(g, sparse=F,type = "upper",names = T)
+```
+
+## borrowed_paper
+```{r}
+library(ggplot2)
+hugo_data <- read.table('/home/byzhang/data/borrowed_paper/hugo_data.txt',sep = '\t', header = T)
+Van_allen_data <- read.table('/home/byzhang/data/borrowed_paper/Van_allen_data.txt',sep = '\t', header = T)
+hugo_VanAllen_merge <- merge(hugo_data,Van_allen_data,all = T)
+
+#Scatter plot
+
+# CD8Atpm_REscore
+setwd("/home/byzhang/data/borrowed_paper/picture/")
+pdf("CD8Atpm_REscore.pdf",width=4.65,height=2.65)
+ggplot(hugo_VanAllen_merge,aes(x=REscore,y=CD8A_tpm))+stat_smooth(method=lm,level=0.99)+geom_point(shape=21,fill="black")+theme_bw()+ theme(panel.grid.major = element_blank(),panel.grid.minor = element_blank(),panel.border=element_blank(),legend.key.size = unit(1,'cm'),legend.position = "right")+scale_x_continuous(breaks = seq(0,90,30))
+cor.test(hugo_VanAllen_merge$REscore,hugo_VanAllen_merge$CD8A_tpm,method="pearson")
+
+# GZMAtpm_REscore
+setwd("/home/byzhang/data/borrowed_paper/picture/")
+pdf("GZMAtpm_REscore.pdf",width=4.65,height=2.65)
+ggplot(hugo_VanAllen_merge,aes(x=REscore,y=GZMA_tpm))+stat_smooth(method=lm,level=0.99)+geom_point(shape=21,fill="black")+theme_bw()+ theme(panel.grid.major = element_blank(),panel.grid.minor = element_blank(),panel.border=element_blank(),legend.key.size = unit(1,'cm'),legend.position = "right")+scale_x_continuous(breaks = seq(0,90,30))+scale_y_continuous(breaks = seq(0,100,25))
+cor.test(hugo_VanAllen_merge$REscore,hugo_VanAllen_merge$GZMA_tpm,method="pearson")
+
+# PRF1tpm_REscore
+setwd("/home/byzhang/data/borrowed_paper/picture/")
+pdf("PRF1tpm_REscore.pdf",width=4.65,height=2.65)
+ggplot(hugo_VanAllen_merge,aes(x=REscore,y=PRF1_tpm))+stat_smooth(method=lm,level=0.99)+geom_point(shape=21,fill="black")+theme_bw()+ theme(panel.grid.major = element_blank(),panel.grid.minor = element_blank(),panel.border=element_blank(),legend.key.size = unit(1,'cm'),legend.position = "right")+scale_x_continuous(breaks = seq(0,90,30))+scale_y_continuous(breaks = seq(0,60,20))
+cor.test(hugo_VanAllen_merge$REscore,hugo_VanAllen_merge$PRF1_tpm,method="pearson")
+
+# CytolyticActivityScore_REscore
+setwd("/home/byzhang/data/borrowed_paper/picture/")
+pdf("CytolyticActivityScore_REscore.pdf",width=4.65,height=2.65)
+ggplot(hugo_VanAllen_merge,aes(x=REscore,y=Cytolytic_activity))+stat_smooth(method=lm,level=0.99)+geom_point(shape=21,fill="black")+theme_bw()+ theme(panel.grid.major = element_blank(),panel.grid.minor = element_blank(),panel.border=element_blank(),legend.key.size = unit(1,'cm'),legend.position = "right")+scale_x_continuous(breaks = seq(0,90,30))+scale_y_continuous(breaks = seq(0,90,30))
+cor.test(hugo_VanAllen_merge$REscore,hugo_VanAllen_merge$Cytolytic_activity,method="pearson")
+
+# Hugo_age_REscore
+setwd("/home/byzhang/data/borrowed_paper/picture/")
+pdf("Hugo_age_REscore.pdf",width=4.65,height=2.65)
+ggplot(hugo_data,aes(x=Age,y=REscore))+stat_smooth(method=lm,level=0.99)+geom_point(shape=21,fill="black")+theme_bw()+ theme(panel.grid.major = element_blank(),panel.grid.minor = element_blank(),panel.border=element_blank(),legend.key.size = unit(1,'cm'),legend.position = "right")+scale_x_continuous(breaks = seq(20,80,20))+scale_y_continuous(breaks = seq(-10,50,20))
+cor.test(hugo_data$Age,hugo_data$REscore,method="pearson")
+
+# VanAllen_age_REscore
+setwd("/home/byzhang/data/borrowed_paper/picture/")
+pdf("VanAllen_age_REscore.pdf",width=4.65,height=2.65)
+ggplot(Van_allen_data,aes(x=Age,y=REscore))+stat_smooth(method=lm,level=0.99)+geom_point(shape=21,fill="black")+theme_bw()+ theme(panel.grid.major = element_blank(),panel.grid.minor = element_blank(),panel.border=element_blank(),legend.key.size = unit(1,'cm'),legend.position = "right")+scale_x_continuous(breaks = seq(20,80,20))+scale_y_continuous(breaks = seq(0,90,30))
+cor.test(Van_allen_data$Age,Van_allen_data$REscore,method="pearson")
+
+# Boxplot
+
+
+
+# Hugo_Prior_MAPKi_REscore_boxplot
+setwd("/home/byzhang/data/borrowed_paper/picture/")
+pdf("Hugo_Prior_MAPKi_REscore_boxplot.pdf",width=4.65,height=2.65)
+ggplot(hugo_data,aes(x=Prior_MAPKi,y=REscore,fill=Prior_MAPKi))+geom_boxplot(width = 0.35) + labs(x = "Prior_MAPKi",y = "RE score")+ scale_fill_manual(values=c("#247e6c", "#e4c666"))+theme_bw()+ ylim(0,30)+theme(panel.grid.major = element_blank(),panel.grid.minor = element_blank(),panel.border=element_blank(),legend.key.size = unit(1,'cm'),legend.position = "right")+scale_x_discrete(expand=c(2,0))
+x=hugo_data[hugo_data$Prior_MAPKi=="N",]$REscore
+y=hugo_data[hugo_data$Prior_MAPKi=="Y",]$REscore
+wilcox.test(x,y,exact=FALSE)
+
+# Hugo_Gender_REscore_boxplot
+setwd("/home/byzhang/data/borrowed_paper/picture/")
+pdf("Hugo_Gender_REscore_boxplot.pdf",width=4.65,height=2.65)
+ggplot(hugo_data,aes(x=Gender,y=REscore,fill=Gender))+geom_boxplot(width = 0.35)+ labs(x = "Gender",y = "RE score")+ scale_fill_manual(values=c("#247e6c", "#e4c666"))+ ylim(0,30)+theme_bw()+theme(panel.grid.major = element_blank(),panel.grid.minor = element_blank(),panel.border=element_blank(),legend.key.size = unit(1,'cm'),legend.position = "right")+scale_x_discrete(expand=c(2,0))
+x=hugo_data[hugo_data$Gender=="F",]$REscore
+y=hugo_data[hugo_data$Gender=="M",]$REscore
+wilcox.test(x,y,exact=FALSE)
+
+# Van_allen_data_Gender_REscore_boxplot
+setwd("/home/byzhang/data/borrowed_paper/picture/")
+pdf("VanAllen_Gender_REscore_boxplot.pdf",width=4.65,height=2.65)
+ggplot(Van_allen_data,aes(x=Gender,y=REscore,fill=Gender))+geom_boxplot(width = 0.35)+ labs(x = "Gender",y = "RE score")+ scale_fill_manual(values=c("#247e6c", "#e4c666"))+ ylim(0,30)+theme_bw()+theme(panel.grid.major = element_blank(),panel.grid.minor = element_blank(),panel.border=element_blank(),legend.key.size = unit(1,'cm'),legend.position = "right")+scale_x_discrete(expand=c(2,0))
+x=Van_allen_data[Van_allen_data$Gender=="F",]$REscore
+y=Van_allen_data[Van_allen_data$Gender=="M",]$REscore
+wilcox.test(x,y,exact=FALSE)
+
+#Van_allen_data_Post_BRAFi_REscore_boxplot
+setwd("/home/byzhang/data/borrowed_paper/picture/")
+pdf("VanAllen_Post_BRAFi_REscore_boxplot.pdf",width=4.65,height=2.65)
+ggplot(Van_allen_data,aes(x=Post_BRAFi,y=REscore,fill=Post_BRAFi))+geom_boxplot(width = 0.35)+ labs(x = "Post BRAFi",y = "RE score")+scale_fill_manual(values=c("#247e6c", "#e4c666"))+ ylim(0,70)+ theme_bw()+theme(panel.grid.major = element_blank(),panel.grid.minor = element_blank(),panel.border=element_blank(),legend.key.size = unit(1,'cm'),legend.position = "right")+scale_x_discrete(expand=c(2,0))
+x=Van_allen_data[Van_allen_data$Post_BRAFi=="Y",]$REscore
+y=Van_allen_data[Van_allen_data$Post_BRAFi=="N",]$REscore
+wilcox.test(x,y,exact=FALSE)
+
+# Hugo_DiseaseStatus_REscore_boxplot
+setwd("/home/byzhang/data/borrowed_paper/picture/")
+pdf("Hugo_DiseaseStatus_REscore_boxplot.pdf",width=4.65,height=2.65)
+ggplot(hugo_data,aes(x=Disease_status,y=REscore,fill=Disease_status))+geom_boxplot(width = 0.65)+ labs(x = "Disease status",y = "RE score")+ ylim(0,30)+theme_bw()+theme(panel.grid.major = element_blank(),panel.grid.minor = element_blank(),panel.border=element_blank(),legend.key.size = unit(1,'cm'),legend.position = "right")+scale_x_discrete(expand=c(0.9,0))
+x=hugo_data[hugo_data$Disease_status=="M0",]$REscore
+y=hugo_data[hugo_data$Disease_status=="M1a",]$REscore
+wilcox.test(x,y,exact=FALSE)
+
+x1=hugo_data[hugo_data$Disease_status=="M0",]$REscore
+y1=hugo_data[hugo_data$Disease_status=="M1b",]$REscore
+wilcox.test(x1,y1,exact=FALSE)
+
+x2=hugo_data[hugo_data$Disease_status=="M0",]$REscore
+y2=hugo_data[hugo_data$Disease_status=="M1c",]$REscore
+wilcox.test(x2,y2,exact=FALSE)
+
+x3=hugo_data[hugo_data$Disease_status=="M1a",]$REscore
+y3=hugo_data[hugo_data$Disease_status=="M1b",]$REscore
+wilcox.test(x3,y3,exact=FALSE)
+
+x4=hugo_data[hugo_data$Disease_status=="M1a",]$REscore
+y4=hugo_data[hugo_data$Disease_status=="M1c",]$REscore
+wilcox.test(x4,y4,exact=FALSE)
+
+x5=hugo_data[hugo_data$Disease_status=="M1b",]$REscore
+y5=hugo_data[hugo_data$Disease_status=="M1c",]$REscore
+wilcox.test(x5,y5,exact=FALSE)
+
+# VanAllen_DiseaseStatus_REscore_boxplot
+setwd("/home/byzhang/data/borrowed_paper/picture/")
+pdf("VanAllen_DiseaseStatus_REscore_boxplot.pdf",width=4.65,height=2.65)
+ggplot(Van_allen_data,aes(x=Disease_status,y=REscore,fill=Disease_status))+geom_boxplot(width = 0.65)+ labs(x = "Disease status",y = "RE score")+ ylim(0,30)+theme_bw()+theme(panel.grid.major = element_blank(),panel.grid.minor = element_blank(),panel.border=element_blank(),legend.key.size = unit(1,'cm'),legend.position = "right")+scale_x_discrete(expand=c(0.9,0))
+x=Van_allen_data[Van_allen_data$Disease_status=="M0",]$REscore
+y=Van_allen_data[Van_allen_data$Disease_status=="M1a",]$REscore
+wilcox.test(x,y,exact=FALSE)
+
+x1=Van_allen_data[Van_allen_data$Disease_status=="M0",]$REscore
+y1=Van_allen_data[Van_allen_data$Disease_status=="M1b",]$REscore
+wilcox.test(x1,y1,exact=FALSE)
+
+x2=Van_allen_data[Van_allen_data$Disease_status=="M0",]$REscore
+y2=Van_allen_data[Van_allen_data$Disease_status=="M1c",]$REscore
+wilcox.test(x2,y2,exact=FALSE)
+
+x3=Van_allen_data[Van_allen_data$Disease_status=="M1a",]$REscore
+y3=Van_allen_data[Van_allen_data$Disease_status=="M1b",]$REscore
+wilcox.test(x3,y3,exact=FALSE)
+
+x4=Van_allen_data[Van_allen_data$Disease_status=="M1a",]$REscore
+y4=Van_allen_data[Van_allen_data$Disease_status=="M1c",]$REscore
+wilcox.test(x4,y4,exact=FALSE)
+
+x5=Van_allen_data[Van_allen_data$Disease_status=="M1b",]$REscore
+y5=Van_allen_data[Van_allen_data$Disease_status=="M1c",]$REscore
+wilcox.test(x5,y5,exact=FALSE)
+dev.off()
+```
+
+## GeneSymble to ID
+```{r}
+# source("https://bioconductor.org/biocLite.R") 
+# biocLite('org.Hs.eg.db')
+geneIDannotation <- function(geneLists=c(1,2,9),name=T,map=T,ensemble=F,accnum=F){
+  ## input ID type : So far I just accept entrezID or symbol
+  ## default, we will annotate the entrezID and symbol, chromosone location and gene name 
+  
+suppressMessages(library("org.Hs.eg.db"))
+  all_EG=mappedkeys(org.Hs.egSYMBOL) 
+  EG2Symbol=toTable(org.Hs.egSYMBOL)
+  if(all(! geneLists %in% all_EG)){
+    inputType='symbol'
+    geneLists=data.frame(symbol=geneLists)
+    results=merge(geneLists,EG2Symbol,by='symbol',all.x=T)
+  }else{
+    inputType='entrezID'
+    geneLists=data.frame(gene_id=geneLists)
+    results=merge(geneLists,EG2Symbol,by='gene_id',all.x=T)
+    }
+    
+  if (name){
+    EG2name=toTable(org.Hs.egGENENAME)
+    results=merge(results,EG2name,by='gene_id',all.x=T)
+  }
+  if(map){
+    EG2MAP=toTable(org.Hs.egMAP)
+    results=merge(results,EG2MAP,by='gene_id',all.x=T)
+  }
+  if(ensemble){
+    EG2ENSEMBL=toTable(org.Hs.egENSEMBL)
+    results=merge(results,EG2ENSEMBL,by='gene_id',all.x=T)
+  }
+  if(accnum){
+    EG2accnum=toTable(org.Hs.egREFSEQ) 
+    results=merge(results,EG2MAP,by='gene_id',all.x=T)
+  }
+  transform <- write.table(results,file = "/home/byzhang/data/SDL_repositioning/data/Gene_symble_toID/GeneSymble_toID.txt",append = T,sep = "\t",eol = "\n",quote = FALSE,row.names = F,col.names = T)
+  return(transform)
+}
+# geneIDannotation()
+
+# read data
+GeneSymble <- read.table('/home/byzhang/data/SDL_repositioning/data/Gene_symble_toID/GeneSymble_2810.txt',sep = '\t',header = F)
+GeneSymble_toVector <- as.vector(GeneSymble$V1)
+geneIDannotation(GeneSymble_toVector)
+```
